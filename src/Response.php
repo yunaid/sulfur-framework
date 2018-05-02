@@ -2,12 +2,10 @@
 
 namespace Sulfur;
 
-use Sulfur\Contract\Response as Contract;
-
 use \Zend\Diactoros\Response as BaseResponse;
 use \Zend\Diactoros\Response\SapiEmitter;
 
-class Response implements Contract
+class Response
 {
 	/**
 	 * PSR7 response
@@ -46,12 +44,12 @@ class Response implements Contract
 		exit;
 	}
 
-	
+
 	/**
 	 * Set status
 	 * @param int $code
 	 * @param string $message
-	 * @return \Sulfur\Bridge\HTTP\Response
+	 * @return Sulfur\Response
 	 */
 	public function status($code, $message = '')
 	{
@@ -59,11 +57,12 @@ class Response implements Contract
 		return $this;
 	}
 
+
 	/**
 	 * Add a header
 	 * @param string $name
 	 * @param string $value
-	 * @return \Sulfur\Bridge\HTTP\Response
+	 * @return Sulfur\Response
 	 */
 	public function header($name, $value)
 	{
@@ -71,10 +70,11 @@ class Response implements Contract
 		return $this;
 	}
 
+
 	/**
 	 * Append to body
 	 * @param string $value
-	 * @return \Sulfur\Bridge\HTTP\Response
+	 * @return Sulfur\Response
 	 */
 	public function body($value)
 	{

@@ -5,6 +5,9 @@ namespace Sulfur\Logger;
 use Sulfur\Logger;
 use Sulfur\Logger\Handlers;
 
+/**
+ * Responsible for making only one of each logger type
+ */
 class Factory
 {
 	protected static $loggers = [];

@@ -2,42 +2,54 @@
 
 namespace Sulfur;
 
-use Sulfur\Contract\Config as Contract;
-
-class Config implements Contract
+class Config
 {
-	/**
-	 * Create a config-object
-	 * @param string $path path to file that holds the resource paths
-	 */
-	public static function make($file)
-	{
-		$config = include($file);
-		$paths = isset($config['paths']) ? $config['paths'] : [];
-		return new self($paths);
-	}
-
-
 	/**
 	 * Paths to load resources from
 	 * @var array
 	 */
-	public $paths = [];
+	protected $paths = [];
+
+
+	/**
+	 * Replacements vars
+	 * @var array
+	 */
+	protected $replace = [];
+
+	/**
+	 * Token for placeholders
+	 * @var array
+	 */
+	protected $token = ['{{', '}}'];
+
+
+	/**
+	 * Pattern for placeholders
+	 * @var array
+	 */
+	protected $pattern = '';
 
 
 	/**
 	 * Hot-cached resources
 	 * @var array
 	 */
-	public $resources = [];
+	protected $resources = [];
 
 
 	/**
 	 * Resources available through get()
 	 * @var array
 	 */
-	public $loaded = [];
+	protected $loaded = [];
 
+
+	/**
+	 * Whether extra resources were loaded
+	 * @var boolean
+	 */
+	protected $changed = false;
 
 
 	/**
@@ -45,9 +57,40 @@ class Config implements Contract
 	 * @param string|array $paths
 	 * @param array $cache
 	 */
-	public function __construct($paths)
+	public function __construct($paths, $replace = [], $token = null)
 	{
 		$this->paths = $paths;
+		$this->replace = $replace;
+		if(is_array($token) && count($token) >= 2) {
+			$this->token[0] = $token[0];
+			$this->token[1] = $token[1];
+		}
+		$this->pattern = '/' . preg_quote($this->token[0]) . '\s*([a-zA-Z0-9\-\_\.]+)\s*' . preg_quote($this->token[1]) . '/';
+	}
+
+
+	/**
+	 * Get or set cached data
+	 * @param array $resources
+	 * @return mixed
+	 */
+	public function resources($resources = null)
+	{
+		if($resources === null) {
+			return $this->resources;
+		} else {
+			$this->resources = array_merge($this->resources, $resources);
+		}
+	}
+
+
+	/**
+	 * Check whether extra resources were loaded (and should be cached)
+	 * @return type
+	 */
+	public function changed()
+	{
+		return $this->changed;
 	}
 
 
@@ -80,7 +123,6 @@ class Config implements Contract
 			return $this->find($data, $key, $default);
 		}
 	}
-
 
 
 	/**
@@ -126,7 +168,7 @@ class Config implements Contract
 	 * @param mixed $default
 	 * @return mixed
 	 */
-	public function get($key, $default = null)
+	public function get($key, $default = null, $replace = null)
 	{
 		foreach($this->loaded as $resource) {
 			$found =  $this->find($this->resources[$resource], $key, false);
@@ -169,6 +211,20 @@ class Config implements Contract
 				}
 			}
 		}
+
+		// replace placeholders
+		array_walk_recursive($data, function(&$item, $key) {
+			if(is_string($item) && strpos($item, $this->token[0]) !== false) {
+				$item = preg_replace_callback($this->pattern, function($matches) {
+					if(isset($this->replace[$matches[1]])) {
+						return $this->replace[$matches[1]];
+					}
+					return $matches[0];
+				}, $item);
+			}
+		});
+
+		$this->changed = true;
 		$this->resources[$resource] = $data;
 		return $data;
 	}

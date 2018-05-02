@@ -2,12 +2,9 @@
 
 namespace Sulfur;
 
-use Sulfur\Contract\Logger as Contract;
-
 use Sulfur\Logger\Handlers;
 
-class Logger implements Contract
-{
+class Logger {
 	const HANDLER_FILE = 'file';
 	const HANDLER_SYSLOG = 'syslog';
 	const HANDLER_MAIL = 'mail';
@@ -36,7 +33,6 @@ class Logger implements Contract
 	{
 		$this->handlers->handle(self::LEVEL_DEBUG, $message, $args);
 	}
-
 
 	public function info($message = '', array $args = [])
 	{

@@ -2,87 +2,71 @@
 
 /**
  * Main Sulfur class to handle a request in a compact way
- * Also serves as a registry to share the container and config globally
  */
 
 namespace Sulfur;
 
-use \Sulfur\Config;
-use \Sulfur\Container;
-use \Sulfur\Router;
-use \Sulfur\Request;
-use \Sulfur\Response;
+use Sulfur\Config;
+use Sulfur\Container;
+use Sulfur\Framework\Cache;
+use Sulfur\Router;
+use Sulfur\Request;
+use Sulfur\Response;
 
 
 class App
 {
-	/**
-	 * Globally shared variables
-	 * @var array
-	 */
-	protected static $shared = [];
-
-
-	/**
-	 * Share a variable globally
-	 * @param string $name
-	 * @param mixed $value
-	 */
-	public static function share($name, $value)
-	{
-		self::$shared[$name] = $value;
-	}
-
-
-	/**
-	 * Get a globally shared variable
-	 * @param string $name
-	 * @param mixed $default
-	 * @return mixed
-	 */
-	public static function shared($name, $default = null)
-	{
-		if(isset(self::$shared[$name])) {
-			return self::$shared[$name];
-		} else {
-			return $default;
-		}
-	}
-
 
 	/**
 	 * Handle a http request
-	 * @param \Sulfur\Contract\Config $config
+	 * @param array $paths path that need to be checked for config resources
+	 * @param array $env env variables
+	 * @param string $config optional config class
 	 */
-	public static function http(Config $config)
+	public static function http($paths, $env, $config = null)
 	{
-		$app = new self($config);
+		$app = new self($paths, $env, $config);
 		$app->handleHttp();
 	}
 
 
 	/**
 	 * Handle a console request
-	 * @param \Sulfur\Contract\Config $config
+	 * @param array $paths path that need to be checked for config resources
+	 * @param array $env env variables
+	 * @param string $config optional config class
 	 */
-	public static function console(Config $config)
+	public static function console($paths, $env, $config = null)
 	{
-		$app = new self($config);
+		$app = new self($paths, $env, $config);
 		$app->handleConsole();
 	}
 
 
 	/**
 	 * Container instance
-	 * @var \Sulfur\Contract\Container
+	 * @var Sulfur\Container
 	 */
 	protected $container;
 
 	/**
 	 * Config instance
-	 * @var \Sulfur\Contract\Config
+	 * @var Sulfur\Config
 	 */
 	protected $config;
+
+	/**
+	 * Cache key constructed from the config paths
+	 * @var string
+	 */
+	protected $key;
+
+	/**
+	 * Framework cache
+	 * @var Sulfur\Framework\Cache
+	 */
+	protected $cache;
+
 
 	/**
 	 * Stack of middelware
@@ -93,40 +77,76 @@ class App
 
 	/**
 	 * App constructor
-	 * Globalize config and container
+	 * Create container and config
+	 * Share container and config in container
+	 * Load config and container from cache
 	 * PHP settings
-	 * @param \Sulfur\Contract\Config $config
+	 * Providers
+	 *
+	 * @param array $paths path that need to be checked for config resources
+	 * @param array $env env variables
+	 * @param string $config optional config class
 	 */
-	public function __construct(Config $config)
+	public function __construct($paths, $env, $config = null)
 	{
+		// create an application key based on the config paths
+		$this->key = md5(implode(',', $paths));
+
 		// create a container
         $this->container = new Container();
-		// share the container globally for helper functions
-		self::share('container', $this->container);
 		// share the container in itself
-		 $this->container->share(Container::class, $this->container);
+		$this->container->share(Container::class, $this->container);
 
-
-		// store config locally
-		$this->config = $config;
-		// share the config globally for helper functions
-		self::share('config', $config);
+		// create config object
+		$class = $config ?: Config::class;
+		$this->config = new $class($paths, $env);
+		// set the env as resource
+		$this->config->resources(['env' => $env]);
 		 // share the config in the container
-		 $this->container->share(Config::class, $config);
+		 $this->container->share(Config::class, $this->config);
+
+		// internal caching
+		$config = $this->config->framework('cache');
+		if(isset($config['active']) && $config['active']) {
+			$class = isset($config['class']) ? $config['class'] : Cache::class;
+			$this->cache = new $class($config);
+			$this->config->resources($this->cache->data('config_' . $this->key));
+			$this->container->reflected($this->cache->data('container_' . $this->key));
+		}
 
 		// PHP settings
-		$php = $config('php');
+		$php = $this->config->php();
 		date_default_timezone_set($php['timezone']);
 		setlocale(LC_ALL, $php['locale']);
 		ini_set('display_errors', $php['display_errors']);
 		error_reporting($php['error_reporting']);
 
-		// register providers
-		$providers = $config->container();
+		// Register providers
+		$providers = $this->config->container();
 		foreach($providers as $provider) {
 			call_user_func([$provider, 'register'], $this->container);
 		}
     }
+
+
+	/**
+	 * Get the used container object
+	 * @return Sulfur\Container
+	 */
+	public function container()
+	{
+		return $this->container;
+	}
+
+
+	/**
+	 * Get the used config object
+	 * @return Sulfur\Config
+	 */
+	public function config()
+	{
+		return $this->config;
+	}
 
 
 	/**
@@ -137,16 +157,46 @@ class App
 	{
 		// create the router
 		$router = $this->container->get(Router::class);
-		// get a request from the router
-		$request = $router->run();
+
+		// get prerendered routesmap
+		if($this->cache && $map = $this->cache->data('router_' . $this->key)) {
+			$router->map($map);
+		}
+
+		// get request
+		$request = $this->container->get(Request::class);
+
+		// get request attributes from the router
+		if($attributes = $router->match($request->path(false), $request->method(), $request->domain())) {
+			$request->attributes($attributes);
+		}
+
 		// create an empty response object
 		$response = $this->container->get(Response::class);
+
 		// set middleware handlers
 		$this->middleware = $this->config->__invoke('middleware');
+
 		// Run it through the handlers
 		$response = $this->handle($request, $response);
+
 		// Send response
 		$response->send();
+
+		// cache config data
+		if($this->cache && $this->config->changed()) {
+			$this->cache->data('config_' . $this->key, $this->config->resources());
+		}
+
+		// cache container data
+		if($this->cache && $this->container->changed()) {
+			$this->cache->data('container_' . $this->key, $this->container->reflected());
+		}
+
+		// cache router data
+		if($this->cache) {
+			$this->cache->data('router_' . $this->key, $router->map());
+		}
 	}
 
 
@@ -154,9 +204,9 @@ class App
 	/**
 	 * Run a request through the stack of middleware
 	 * @staticvar int $i
-	 * @param \Sulfur\Request $request
-	 * @param \Sulfur\Response $response
-	 * @return \Sulfur\Response
+	 * @param Sulfur\Request $request
+	 * @param Sulfur\Response $response
+	 * @return Sulfur\Response
 	 */
 	protected function handle(Request $request, Response $response)
 	{

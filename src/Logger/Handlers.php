@@ -2,7 +2,6 @@
 
 namespace Sulfur\Logger;
 
-use Sulfur\Contract\LoggerHandlers as Contract;
 use Sulfur\Logger;
 
 use Monolog\Logger as BaseLogger;
@@ -12,11 +11,11 @@ use Monolog\Handler\NativeMailerHandler;
 use Monolog\Formatter\LineFormatter;
 use Monolog\Formatter\HtmlFormatter;
 
-class Handlers implements Contract
+class Handlers
 {
 	/**
 	 * The monolog instance
-	 * @var \Monolog\Logger
+	 * @var Monolog\Logger
 	 */
 	protected $logger;
 

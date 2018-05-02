@@ -2,27 +2,28 @@
 
 namespace Sulfur\Middleware;
 
-use Sulfur\Contract\Middleware as Contract;
+use Sulfur\Middleware\Contract as Middleware;
 
-use Sulfur\Contract\Container;
-use Sulfur\Contract\Request;
-use Sulfur\Contract\Response;
+use Sulfur\Container;
+use Sulfur\Request;
+use Sulfur\Response;
+use Exception;
 
-class ControllerException extends \Exception {}
+class ControllerException extends Exception {}
 
-class Controller implements Contract
+class Controller implements Middleware
 {
 
 	/**
 	 * Container instance
-	 * @var Sulfur\Contract\Container
+	 * @var Sulfur\Container
 	 */
 	protected $container;
 
 
 	/**
 	 * Create a controller
-	 * @param \Sulfur\Contract\Container $container
+	 * @param Sulfur\Container $container
 	 */
 	public function __construct(Container $container)
 	{
@@ -32,11 +33,10 @@ class Controller implements Contract
 
 	/**
 	 * Run the middleware
-	 * @param \Sulfur\Contract\Request $request
-	 * @param \Sulfur\Contract\Response $response
-	 * @param \callable $next
-	 * @return \Sulfur\Contract\Response
-	 * @throws ControllerException
+	 * @param Sulfur\Request $request
+	 * @param Sulfur\Response $response
+	 * @param callable $next
+	 * @return Sulfur\Response
 	 */
 	public function __invoke(
         Request $request,
@@ -44,7 +44,7 @@ class Controller implements Contract
         callable $next
     ) {
 		// get handler
-		$handler = $request->handler();
+		$handler = $request->get('handler');
 
 		// create & execute a controller-action
 		if($handler && strpos($handler, '@') !== false){
